@@ -30,7 +30,6 @@ async def get_all(
     return await app.fifo_queue.put(get_limit_by_domain(page, limit, domain))
 
 
-
 @app.post("/post_flat")
 async def post_flat(request: list[SchemaFlat]):
     return await app.fifo_queue.put(save_flats(request))
@@ -87,8 +86,6 @@ async def get_limit_by_domain(
                   .filter_by(domain=domain, is_active=True)
                   .order_by(ModelFlat.id)
                   .slice(page * limit, (page + 1) * limit)))
-
-
 
 
 if __name__ == '__main__':
