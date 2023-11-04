@@ -27,57 +27,62 @@ async def get_all(
         page: int = 0,
         limit: int = 100,
         domain: str = "olx"):
-    return await app.fifo_queue.put(get_limit_by_domain(page, limit, domain))
+    return get_limit_by_domain(page, limit, domain)
 
 
-@app.post("/post_flat")
-async def post_flat(request: list[SchemaFlat]):
-    return await app.fifo_queue.put(save_flats(request))
+@app.post("/post_flats")
+async def post_flats(request: list[SchemaFlat]):
+    for i in request:
+        await app.fifo_queue.put(i)
+    pass
 
 
 @app.on_event("startup")
 async def start_db():
+    print("I am alive!")
     asyncio.create_task(worker())
 
 
 async def worker():
-    logging.log("Worker started")
     while True:
-        job = await app.fifo_queue.get()
-        logging.log(f"Got a job: (size of remaining queue: {app.fifo_queue.qsize()})")
-        await job()
+
+        flat = await app.fifo_queue.get()
+        print(f"Processing {flat}")
+        await save_flat(flat)
 
 
-async def save_flats(request: list[SchemaFlat]):
-    for flat in request:
-        db_flat = ModelFlat(
-            external_id=flat.id,
-            url=flat.url,
-            square=flat.square,
-            floor=flat.floor,
-            total_floor=flat.total_floor,
-            address=flat.address,
-            repair=flat.repair,
-            is_new_building=flat.is_new_building,
-            room=flat.room,
-            modified=flat.modified,
-            price_uye=flat.price_uye,
-            price_uzs=flat.price_uzs,
-            description=flat.description,
-            domain=flat.domain,
-            is_active=flat.is_active
-        )
+async def save_flat(flat: SchemaFlat):
+    db_flat = ModelFlat(
+        external_id=flat.id,
+        url=flat.url,
+        square=flat.square,
+        floor=flat.floor,
+        total_floor=flat.total_floor,
+        address=flat.address,
+        repair=flat.repair,
+        is_new_building=flat.is_new_building,
+        room=flat.room,
+        modified=flat.modified,
+        price_uye=flat.price_uye,
+        price_uzs=flat.price_uzs,
+        description=flat.description,
+        domain=flat.domain,
+        is_active=flat.is_active
+    )
+    with db():
         if db.session.query(ModelFlat).filter_by(external_id=flat.id).count() == 0:
             db.session.add(db_flat)
         else:
             db.session.merge(db_flat)
-    return ResponseModel(status_code="OK")
+        db.session.commit()
+    pass
 
 
 async def get_limit_by_domain(
         page: int = 0,
         limit: int = 100,
         domain: str = "olx"):
+    print("I do not return I am a bad bitch!! Punish me sir!")
     return ResponseModel(
         status_code="Ok",
         data_length=db.session.query(ModelFlat).filter_by(domain=domain).count(),
