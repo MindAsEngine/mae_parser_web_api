@@ -15,7 +15,7 @@ class Flat(Base):
     total_floor = Column(String, default='')
     address = Column(String, default='')
     repair = Column(String, server_default="repair")
-    is_new_building = Column(Boolean, unique=False, default=True)
+    is_new_building = Column(String, default='')
     room = Column(String, default='')
     created = Column(DateTime(timezone=True), server_default=func.now())
     modified = Column(DateTime(timezone=True), server_default=func.now(), server_onupdate=func.now())

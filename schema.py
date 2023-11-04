@@ -10,7 +10,7 @@ class Flat(BaseModel):
     total_floor: str
     address: str
     repair: str
-    is_new_building: bool
+    is_new_building: str
     room: str
     modified: str
     price_uye: float
