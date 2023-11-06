@@ -8,8 +8,8 @@ Base = declarative_base()
 class Flat(Base):
     __tablename__ = 'flats'
 
-    id = Column(Integer, primary_key=True, unique=True, autoincrement=True)
-    external_id = Column(Integer, primary_key=False, default=0, nullable=False)
+    external_id = Column(Integer, primary_key=True, default=0, nullable=False)
+    domain = Column(String, default='', primary_key=True)
     url = Column(String, default='')
     square = Column(Float, default=1.0)
     floor = Column(String, default='')
@@ -23,5 +23,4 @@ class Flat(Base):
     price_uye = Column(Float, default=1.0)
     price_uzs = Column(Float, default=1.0)
     description = Column(String, default="")
-    domain = Column(String, default='')
     is_active = Column(Boolean, unique=False, default=True)
