@@ -1,5 +1,6 @@
 import asyncio
-from datetime import datetime
+import http
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi_sqlalchemy import DBSessionMiddleware, db
@@ -43,6 +44,7 @@ consoleHandler = logging.StreamHandler()
 consoleHandler.setFormatter(formatter)
 logger.addHandler(consoleHandler)
 
+status_codes = http.HTTPStatus
 # Pass the logger to alembic.config.main() as the logger argument
 
 
@@ -52,7 +54,6 @@ async def get_all(
         limit: int = 10000,
         domain: str = "uybor"):
     return ResponseModel(
-        status_code="Ok",
         data_length=db.session.query(ModelFlat).filter_by(domain=domain).count(),
         data=list(db.session
                   .query(ModelFlat)
@@ -63,9 +64,12 @@ async def get_all(
 
 @app.post("/post_flats")
 async def post_flats(request: list[SchemaFlat]):
+    if len(request) == 0:
+        logger.warning(f'Post method received no data!')
+        return ResponseModel(status_code=status_codes.NO_CONTENT)
     for i in request:
         await app.fifo_queue.put(i)
-    pass
+    return ResponseModel(status_code=status_codes.CONTINUE)
 
 
 @app.get("/get_count")
@@ -75,9 +79,7 @@ async def get_count_by_domain(domain: str = ""):
     else:
         db_power = db.session.query(ModelFlat).filter_by(domain=domain).count()
     logger.info(f'Total domain:{domain} length: {db_power}')
-    return ResponseModel(status_code="OK",
-                         data_length=db_power,
-                         data=[])
+    return ResponseModel(data_length=db_power)
 
 
 @app.on_event("startup")
@@ -118,7 +120,8 @@ async def save_flat(flat: SchemaFlat):
             db.session.merge(db_flat)
             logger.info(f'Updating entity: {db_flat.external_id} MERGED')
         db.session.commit()
-        logger.info(f'OK! Committed total: {db.session.query(ModelFlat).count()}')
+        logger.info(f'OK! Committed total uybor: {db.session.query(ModelFlat).filter_by(domain="uybor").count()}')
+        logger.info(f'OK! Committed total olx: {db.session.query(ModelFlat).filter_by(domain="olx").count()}')
     pass
 
 
