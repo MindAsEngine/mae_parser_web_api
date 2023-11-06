@@ -26,7 +26,6 @@
     volumes:
   #DEPLOY  - /home/mae_parser_web_api/pg_data:/var/lib/postgresql/data
       - ./pg_data:/var/lib/postgresql/data
-
     restart: unless-stopped
     ports:
       - '5555:5432'

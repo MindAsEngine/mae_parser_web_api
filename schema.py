@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 
 class Flat(BaseModel):
-    id: int
+    external_id: int
     url: str
     square: float
     floor: str

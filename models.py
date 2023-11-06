@@ -8,7 +8,8 @@ Base = declarative_base()
 class Flat(Base):
     __tablename__ = 'flats'
 
-    external_id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, unique=True, autoincrement=True)
+    external_id = Column(Integer, primary_key=False, default=0, nullable=False)
     url = Column(String, default='')
     square = Column(Float, default=1.0)
     floor = Column(String, default='')

@@ -90,13 +90,13 @@ async def start_db():
 async def worker():
     while True:
         flat = await app.fifo_queue.get()
-        logger.info(f"Processing id: {flat.id} with domain: {flat.domain}")
+        logger.info(f"Processing id: {flat.external_id} with domain: {flat.domain}")
         await save_flat(flat)
 
 
 async def save_flat(flat: SchemaFlat):
     db_flat = ModelFlat(
-        external_id=flat.id,
+        external_id=flat.external_id,
         url=flat.url,
         square=flat.square,
         floor=flat.floor,
@@ -113,12 +113,15 @@ async def save_flat(flat: SchemaFlat):
         is_active=flat.is_active
     )
     with db():
-        if db.session.query(ModelFlat).filter_by(external_id=flat.id).count() == 0:
+        query = db.session.query(ModelFlat).filter_by(external_id=db_flat.external_id, domain=db_flat.domain)
+        if query.count() == 0:
             db.session.add(db_flat)
             logger.info(f'Saving entity:{db_flat.external_id} ADDED')
-        else:
+        elif query.first().modified.__str__() != flat.modified.__str__():
             db.session.merge(db_flat)
             logger.info(f'Updating entity: {db_flat.external_id} MERGED')
+        else:
+            logger.warning(f'Continuing with no save {db_flat.external_id} {db_flat.domain}')
         db.session.commit()
         logger.info(f'OK! Committed total uybor: {db.session.query(ModelFlat).filter_by(domain="uybor").count()}')
         logger.info(f'OK! Committed total olx: {db.session.query(ModelFlat).filter_by(domain="olx").count()}')
