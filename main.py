@@ -27,7 +27,14 @@ async def get_all(
         page: int = 0,
         limit: int = 100,
         domain: str = "olx"):
-    return get_limit_by_domain(page, limit, domain)
+    return ResponseModel(
+        status_code="Ok",
+        data_length=db.session.query(ModelFlat).filter_by(domain=domain).count(),
+        data=list(db.session
+                  .query(ModelFlat)
+                  .filter_by(domain=domain, is_active=True)
+                  .order_by(ModelFlat.external_id)
+                  .slice(page * limit, (page + 1) * limit)))
 
 
 @app.post("/post_flats")
@@ -45,7 +52,6 @@ async def start_db():
 
 async def worker():
     while True:
-
         flat = await app.fifo_queue.get()
         print(f"Processing {flat}")
         await save_flat(flat)
@@ -76,21 +82,6 @@ async def save_flat(flat: SchemaFlat):
             db.session.merge(db_flat)
         db.session.commit()
     pass
-
-
-async def get_limit_by_domain(
-        page: int = 0,
-        limit: int = 100,
-        domain: str = "olx"):
-    print("I do not return I am a bad bitch!! Punish me sir!")
-    return ResponseModel(
-        status_code="Ok",
-        data_length=db.session.query(ModelFlat).filter_by(domain=domain).count(),
-        data=list(db.session
-                  .query(ModelFlat)
-                  .filter_by(domain=domain, is_active=True)
-                  .order_by(ModelFlat.id)
-                  .slice(page * limit, (page + 1) * limit)))
 
 
 if __name__ == '__main__':
