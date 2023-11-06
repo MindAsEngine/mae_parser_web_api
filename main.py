@@ -114,15 +114,25 @@ async def save_flat(flat: SchemaFlat):
     )
     with db():
         query = db.session.query(ModelFlat).filter_by(external_id=db_flat.external_id, domain=db_flat.domain)
+        time_format="%d/%m/%Y %H:%M:%S"
+        modified_db = None
+        modified_request = None
+
+        if query.first() is not None:
+            modified_db = query.first().modified
+            modified_request = flat.modified
+            logger.info(f'Date time for merge equation \n{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
         if query.count() == 0:
             db.session.add(db_flat)
             logger.info(f'Saving entity:{db_flat.external_id} ADDED')
-        elif query.first().modified.__str__() != flat.modified.__str__():
+        elif modified_db.strftime(time_format) != modified_request.strftime(time_format):
             db.session.merge(db_flat)
-            logger.info(f'Updating entity: {db_flat.external_id} MERGED')
+            logger.error(
+                f'Updating entity: {db_flat.external_id} MERGED with modeified:\n{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
         else:
             logger.warning(f'Continuing with no save {db_flat.external_id} {db_flat.domain}')
         db.session.commit()
+
         logger.info(f'OK! Committed total uybor: {db.session.query(ModelFlat).filter_by(domain="uybor").count()}')
         logger.info(f'OK! Committed total olx: {db.session.query(ModelFlat).filter_by(domain="olx").count()}')
     pass

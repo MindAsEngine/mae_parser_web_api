@@ -19,7 +19,7 @@ class Flat(Base):
     is_new_building = Column(String, default='')
     room = Column(String, default='')
     created = Column(DateTime(timezone=True), server_default=func.now())
-    modified = Column(DateTime(timezone=True), server_default=func.now(), server_onupdate=func.now())
+    modified = Column(DateTime(), server_default=func.now())
     price_uye = Column(Float, default=1.0)
     price_uzs = Column(Float, default=1.0)
     description = Column(String, default="")
