@@ -8,6 +8,9 @@
     build:
       context: .
     env_file: .env
+    volumes:
+#DEPLOY      - /home/mae_parser_web_api/logs/logs.log:/app/logs/logs.log
+    - ./logs/logs.log:/app/logs/logs.log
     restart: unless-stopped
     ports:
       - '8000:8000'
