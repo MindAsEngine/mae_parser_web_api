@@ -44,6 +44,13 @@ async def post_flats(request: list[SchemaFlat]):
     pass
 
 
+@app.get("/get_count")
+async def get_count_by_domain(domain: str = "olx"):
+    return ResponseModel(status_code="OK",
+                         data_length=db.session.query(ModelFlat).filter_by(domain=domain).count(),
+                         data=[])
+
+
 @app.on_event("startup")
 async def start_db():
     print("I am alive!")
