@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi_sqlalchemy import DBSessionMiddleware, db
 import logging
 
-from schema import Flat as SchemaFlat
+from schema import Flat as SchemaFlat, GetFlatsMessage
 
 from models import Flat as ModelFlat
 
@@ -19,6 +19,7 @@ load_dotenv('.env')
 
 app = FastAPI()
 app.fifo_queue = asyncio.Queue()
+app.response_queue = asyncio.Queue()
 # to avoid csrftokenError
 app.add_middleware(DBSessionMiddleware, db_url=os.environ['DATABASE_URL'])
 # logging.basicConfig(filename=os.environ['LOG_FILE'],
@@ -45,6 +46,8 @@ consoleHandler.setFormatter(formatter)
 logger.addHandler(consoleHandler)
 
 status_codes = http.HTTPStatus
+
+
 # Pass the logger to alembic.config.main() as the logger argument
 
 
@@ -53,13 +56,8 @@ async def get_all(
         page: int = 0,
         limit: int = 10000,
         domain: str = "uybor"):
-    return ResponseModel(
-        data_length=db.session.query(ModelFlat).filter_by(domain=domain).count(),
-        data=list(db.session
-                  .query(ModelFlat)
-                  .filter_by(domain=domain, is_active=True)
-                  .order_by(ModelFlat.external_id)
-                  .slice(page * limit, (page + 1) * limit)))
+    await app.fifo_queue.put(GetFlatsMessage(page=page, domain=domain, limit=limit))
+    return await app.response_queue.get()
 
 
 @app.post("/post_flats")
@@ -84,14 +82,51 @@ async def get_count_by_domain(domain: str = ""):
 
 @app.on_event("startup")
 async def start_db():
-    asyncio.create_task(worker())
+    asyncio.create_task(worker(app.fifo_queue))
+    asyncio.create_task(consumer(app.response_queue))
 
 
-async def worker():
+async def consumer(response_queue: asyncio.Queue):
     while True:
-        flat = await app.fifo_queue.get()
-        logger.info(f"Processing id: {flat.external_id} with domain: {flat.domain}")
-        await save_flat(flat)
+        message = await response_queue.get()
+        if isinstance(message, GetFlatsMessage):
+            logger.info(f"Processing command: {message}")
+            return await read_flat(
+                page=message.page,
+                limit=message.limit,
+                domain=message.domain)
+        app.response_queue.task_done()
+
+
+async def worker(fifo_queue: asyncio.Queue):
+    while True:
+        message = await fifo_queue.get()
+        logger.info(message is SchemaFlat)
+        logger.info(message is GetFlatsMessage)
+        if isinstance(message, SchemaFlat):
+            logger.info(f"Processing id: {message.external_id} with domain: {message.domain}")
+            await save_flat(message)
+        elif isinstance(message, GetFlatsMessage):
+            logger.info(f"Processing command: {message}")
+            await app.response_queue.put(message)
+        elif isinstance(message, ResponseModel):
+            logger.info(f"Responce is here {message}")
+        else:
+            logger.info(f'Worker exited')
+        app.fifo_queue.task_done()
+
+
+async def read_flat(
+        page: int = 0,
+        limit: int = 10000,
+        domain: str = "uybor"):
+    with db():
+        data = db.session.query(ModelFlat).filter_by(domain=domain, is_active=True).order_by(ModelFlat.external_id).slice(page * limit, (page + 1) * limit)
+        data_len = db.session.query(ModelFlat).filter_by(domain=domain).count()
+    logger.info(f'Read from db {data_len}')
+    return ResponseModel(
+            data_length=data_len,
+            data=data)
 
 
 async def save_flat(flat: SchemaFlat):
@@ -114,14 +149,15 @@ async def save_flat(flat: SchemaFlat):
     )
     with db():
         query = db.session.query(ModelFlat).filter_by(external_id=db_flat.external_id, domain=db_flat.domain)
-        time_format="%d/%m/%Y %H:%M:%S"
+        time_format = "%d/%m/%Y %H:%M:%S"
         modified_db = None
         modified_request = None
 
         if query.first() is not None:
             modified_db = query.first().modified
             modified_request = flat.modified
-            logger.info(f'Date time for merge equation \n{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
+            logger.info(
+                f'Date time for merge equation \n{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
         if query.count() == 0:
             db.session.add(db_flat)
             logger.info(f'Saving entity:{db_flat.external_id} ADDED')

@@ -21,3 +21,9 @@ class Flat(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class GetFlatsMessage(BaseModel):
+    page: int
+    limit: int
+    domain: str
