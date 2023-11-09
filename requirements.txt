@@ -1,4 +1,4 @@
-uvicorn~=0.23.2
+uvicorn~=0.24.0.post1
 fastapi~=0.104.1
 python-dotenv~=1.0.0
 SQLAlchemy~=2.0.22
@@ -14,3 +14,4 @@ starlette~=0.27.0
 greenlet~=3.0.1
 psycopg2~=2.9.9
 fastapi_sqlalchemy~=0.2.1
+aiohttp~=3.8.6
