@@ -13,6 +13,7 @@ class Flat(BaseModel):
     is_new_building: str
     room: str
     modified: datetime
+    # modified: str
     price_uye: float
     price_uzs: float
     description: str

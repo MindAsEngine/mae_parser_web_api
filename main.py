@@ -1,6 +1,7 @@
 import asyncio
 import http
 
+import aiohttp
 import uvicorn
 from fastapi import FastAPI
 from fastapi_sqlalchemy import DBSessionMiddleware, db
@@ -18,8 +19,8 @@ from dotenv import load_dotenv
 load_dotenv('.env')
 
 app = FastAPI()
-app.fifo_queue = asyncio.Queue()
 app.response_queue = asyncio.Queue()
+app.priority_queue = asyncio.Queue()
 # to avoid csrftokenError
 app.add_middleware(DBSessionMiddleware, db_url=os.environ['DATABASE_URL'])
 # logging.basicConfig(filename=os.environ['LOG_FILE'],
@@ -56,8 +57,8 @@ async def get_all(
         page: int = 0,
         limit: int = 10000,
         domain: str = "uybor"):
-    await app.fifo_queue.put(GetFlatsMessage(page=page, domain=domain, limit=limit))
-    return await app.response_queue.get()
+    response = await read_flat(page=page, limit=limit, domain=domain)
+    return response
 
 
 @app.post("/post_flats")
@@ -66,7 +67,8 @@ async def post_flats(request: list[SchemaFlat]):
         logger.warning(f'Post method received no data!')
         return ResponseModel(status_code=status_codes.NO_CONTENT)
     for i in request:
-        await app.fifo_queue.put(i)
+        await save_flat(i)
+        # await app.response_queue.put(i)
     return ResponseModel(status_code=status_codes.CONTINUE)
 
 
@@ -80,40 +82,93 @@ async def get_count_by_domain(domain: str = ""):
     return ResponseModel(data_length=db_power)
 
 
-@app.on_event("startup")
-async def start_db():
-    asyncio.create_task(worker(app.fifo_queue))
-    asyncio.create_task(consumer(app.response_queue))
+@app.get("/is_active")
+async def is_active_get(wrong_type_of_market: bool = False):
+    offers = db.session.query(ModelFlat).all()
+    await is_active_all_offers(offers, wrong_type_of_market)
+    db_power = db.session.query(ModelFlat).filter_by(is_active=True).count()
+    return ResponseModel(data_length=db_power)
 
 
-async def consumer(response_queue: asyncio.Queue):
-    while True:
-        message = await response_queue.get()
-        if isinstance(message, GetFlatsMessage):
-            logger.info(f"Processing command: {message}")
-            return await read_flat(
-                page=message.page,
-                limit=message.limit,
-                domain=message.domain)
-        app.response_queue.task_done()
-
-
-async def worker(fifo_queue: asyncio.Queue):
-    while True:
-        message = await fifo_queue.get()
-        logger.info(message is SchemaFlat)
-        logger.info(message is GetFlatsMessage)
-        if isinstance(message, SchemaFlat):
-            logger.info(f"Processing id: {message.external_id} with domain: {message.domain}")
-            await save_flat(message)
-        elif isinstance(message, GetFlatsMessage):
-            logger.info(f"Processing command: {message}")
-            await app.response_queue.put(message)
-        elif isinstance(message, ResponseModel):
-            logger.info(f"Responce is here {message}")
+async def is_active_all_offers(offers, wrong_type_of_market=False):
+    headers = {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36 OPR/60.0.3255.170",
+        "accept": "*/*"
+    }
+    for offer in offers:
+        session_timeout = aiohttp.ClientTimeout(total=None)
+        session = aiohttp.ClientSession(headers=headers, timeout=session_timeout)
+        if offer.domain == "uybor":
+            url = f'https://api.uybor.uz/api/v1/listings/{offer.external_id}'
+            async with (session.get(url) as resp):
+                if resp.status == 200:
+                    # print(url)
+                    data = await resp.json()
+                    if not data.get('isActive'):
+                        offer.is_active = False
         else:
-            logger.info(f'Worker exited')
-        app.fifo_queue.task_done()
+            url = f'https://www.olx.uz/api/v1/offers/{offer.external_id}'
+            async with (session.get(url) as resp):
+                if resp.status == 200:
+                    # print(url)
+                    response = await resp.json()
+                    data = response.get('data')
+                    if data.get('status') != 'active':
+                        offer.is_active = False
+                    if wrong_type_of_market:
+                        params = data.get('params')
+                        for param in params:
+                            key = param.get("key")
+                            if key == 'type_of_market':
+                                if param.get('value').get('key') == 'secondary':
+                                    type_of_market = "Вторичный"
+                                else:
+                                    type_of_market = "Новостройка"
+                        offer.is_new_building = type_of_market
+    #log
+                else:
+                    offer.is_active = False
+#log
+        await session.close()
+
+
+# @app.on_event("startup")
+# async def start_db():
+#     # await asyncio.gather(worker(app.fifo_queue), consumer(app.response_queue))
+#     asyncio.create_task(worker())
+#     asyncio.create_task(consumer())
+
+
+# async def consumer():  # read from que
+#     while True:
+#         message = await app.priority_queue.get()
+#         if isinstance(message, GetFlatsMessage):
+#             logger.info(f"Processing command: {message}")
+#             answer = await read_flat(
+#                 page=message.page,
+#                 limit=message.limit,
+#                 domain=message.domain)
+#             # app.priority_queue.task_done()
+#             logger.warning(f'{answer}')
+#             return answer
+#
+#
+# async def worker():  # write
+#     while True:
+#         message = await app.response_queue.get()
+#         logger.info(message is SchemaFlat)
+#         logger.info(message is GetFlatsMessage)
+#         if isinstance(message, SchemaFlat):
+#             logger.info(f"Processing id: {message.external_id} with domain: {message.domain}")
+#             await save_flat(message)
+#         elif isinstance(message, GetFlatsMessage):
+#             logger.info(f"Processing command: {message}")
+#             await app.priority_queue.put(message)
+#         elif isinstance(message, ResponseModel):
+#             logger.info(f"Responce is here {message}")
+#         else:
+#             logger.info(f'Worker exited')
+#         # app.response_queue.task_done()
 
 
 async def read_flat(
@@ -121,12 +176,13 @@ async def read_flat(
         limit: int = 10000,
         domain: str = "uybor"):
     with db():
-        data = db.session.query(ModelFlat).filter_by(domain=domain, is_active=True).order_by(ModelFlat.external_id).slice(page * limit, (page + 1) * limit)
+        data = list(db.session.query(ModelFlat).filter_by(domain=domain, is_active=True).order_by(
+            ModelFlat.external_id).slice(page * limit, (page + 1) * limit))
         data_len = db.session.query(ModelFlat).filter_by(domain=domain).count()
     logger.info(f'Read from db {data_len}')
     return ResponseModel(
-            data_length=data_len,
-            data=data)
+        data_length=data_len,
+        data=data)
 
 
 async def save_flat(flat: SchemaFlat):
