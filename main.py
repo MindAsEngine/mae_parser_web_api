@@ -1,5 +1,6 @@
 import asyncio
 import http
+import random
 
 import aiohttp
 import uvicorn
@@ -97,6 +98,7 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
     }
     for offer in offers:
         session_timeout = aiohttp.ClientTimeout(total=None)
+        await asyncio.sleep(random.randint(5, 15))
         session = aiohttp.ClientSession(headers=headers, timeout=session_timeout)
         if offer.domain == "uybor":
             url = f'https://api.uybor.uz/api/v1/listings/{offer.external_id}'
@@ -150,7 +152,7 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
                     db.session.commit()
                     logger.info(f'Not found status set to inactive: {offer.external_id} domain: {offer.domain}')
                 else:
-                    logger.warning(f'Response not handled {resp.status}')
+                    logger.warning(f'Response not handled {resp.status} in domain: {offer.domain}')
         else:
             logger.info(f'This domain was never used')
         await session.close()
