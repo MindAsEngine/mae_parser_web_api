@@ -98,7 +98,7 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
     }
     for offer in offers:
         session_timeout = aiohttp.ClientTimeout(total=None)
-        await asyncio.sleep(random.randint(5, 15))
+        await asyncio.sleep(random.randint(2, 6))
         session = aiohttp.ClientSession(headers=headers, timeout=session_timeout)
         if offer.domain == "uybor":
             url = f'https://api.uybor.uz/api/v1/listings/{offer.external_id}'
@@ -111,7 +111,7 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
                         db.session.merge(offer)
                         db.session.commit()
                         logger.info(f'Set to inactive: {offer.external_id} domain: {offer.domain}')
-                elif resp.status == 404 or resp.status ==410:
+                elif resp.status == 404 or resp.status == 410:
                     offer.is_active = False
                     db.session.merge(offer)
                     db.session.commit()
@@ -138,12 +138,12 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
                                 elif param.get('value').get('key') == 'primary':
                                     type_of_market = "Новостройка"
                                 else:
-                                    logger.error(f"Wrong type of market {param.get('value').get('key')}")
+                                    logger.error(f"Bad format type of market {param.get('value').get('key')}")
                                     break
                                 offer.is_new_building = type_of_market
                                 db.session.merge(offer)
                                 db.session.commit()
-                                logger.info(f'Wrong type of market for {offer.external_id} set: {type_of_market}')
+                                logger.info(f'Wrong type of market for {offer.domain} {offer.external_id} set: {type_of_market}')
                                 break
                             logger.info(f'Nothing happend to {offer.external_id} domain: {offer.domain}')
                 elif resp.status == 404 or resp.status == 410:
