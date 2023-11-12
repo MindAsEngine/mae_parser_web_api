@@ -106,7 +106,15 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
                     data = await resp.json()
                     if not data.get('isActive'):
                         offer.is_active = False
-        else:
+                        db.session.merge(offer)
+                        db.session.commit()
+                        logger.info(f'Set to inactive: {offer.external_id} domain: {offer.domain}')
+                elif resp.status == 404 or resp.status ==410:
+                    offer.is_active = False
+                    db.session.merge(offer)
+                    db.session.commit()
+                    logger.info(f'Not found status set to inactive: {offer.external_id} domain: {offer.domain}')
+        elif offer.domain == "olx":
             url = f'https://www.olx.uz/api/v1/offers/{offer.external_id}'
             async with (session.get(url) as resp):
                 if resp.status == 200:
@@ -115,6 +123,9 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
                     data = response.get('data')
                     if data.get('status') != 'active':
                         offer.is_active = False
+                        db.session.merge(offer)
+                        db.session.commit()
+                        logger.info(f'Set to inactive: {offer.external_id} domain: {offer.domain}')
                     if wrong_type_of_market:
                         params = data.get('params')
                         for param in params:
@@ -122,13 +133,26 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
                             if key == 'type_of_market':
                                 if param.get('value').get('key') == 'secondary':
                                     type_of_market = "Вторичный"
-                                else:
+                                elif param.get('value').get('key') == 'primary':
                                     type_of_market = "Новостройка"
-                        offer.is_new_building = type_of_market
-    #log
-                else:
+                                else:
+                                    logger.error(f"Wrong type of market {param.get('value').get('key')}")
+                                    break
+                                offer.is_new_building = type_of_market
+                                db.session.merge(offer)
+                                db.session.commit()
+                                logger.info(f'Wrong type of market for {offer.external_id} set: {type_of_market}')
+                                break
+                            logger.info(f'Nothing happend to {offer.external_id} domain: {offer.domain}')
+                elif resp.status == 404 or resp.status == 410:
                     offer.is_active = False
-#log
+                    db.session.merge(offer)
+                    db.session.commit()
+                    logger.info(f'Not found status set to inactive: {offer.external_id} domain: {offer.domain}')
+                else:
+                    logger.warning(f'Response not handled {resp.status}')
+        else:
+            logger.info(f'This domain was never used')
         await session.close()
 
 
