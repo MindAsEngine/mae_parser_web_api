@@ -98,7 +98,7 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
     }
     for offer in offers:
         session_timeout = aiohttp.ClientTimeout(total=None)
-        await asyncio.sleep(random.randint(2, 6))
+        await asyncio.sleep(random.random())
         session = aiohttp.ClientSession(headers=headers, timeout=session_timeout)
         if offer.domain == "uybor":
             url = f'https://api.uybor.uz/api/v1/listings/{offer.external_id}'
