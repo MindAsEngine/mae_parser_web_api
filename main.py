@@ -97,65 +97,70 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
         "accept": "*/*"
     }
     for offer in offers:
-        session_timeout = aiohttp.ClientTimeout(total=None)
-        await asyncio.sleep(random.random())
-        session = aiohttp.ClientSession(headers=headers, timeout=session_timeout)
-        if offer.domain == "uybor":
-            url = f'https://api.uybor.uz/api/v1/listings/{offer.external_id}'
-            async with (session.get(url) as resp):
-                if resp.status == 200:
-                    # print(url)
-                    data = await resp.json()
-                    if not data.get('isActive'):
+        while True:
+            session_timeout = aiohttp.ClientTimeout(total=None)
+            await asyncio.sleep(random.random())
+            session = aiohttp.ClientSession(headers=headers, timeout=session_timeout)
+            if offer.domain == "uybor":
+                url = f'https://api.uybor.uz/api/v1/listings/{offer.external_id}'
+                async with (session.get(url) as resp):
+                    if resp.status == 200:
+                        # print(url)
+                        data = await resp.json()
+                        if not data.get('isActive'):
+                            offer.is_active = False
+                            db.session.merge(offer)
+                            db.session.commit()
+                            logger.info(f'Set to inactive: {offer.external_id} domain: {offer.domain}')
+                    elif resp.status == 404 or resp.status == 410:
                         offer.is_active = False
                         db.session.merge(offer)
                         db.session.commit()
-                        logger.info(f'Set to inactive: {offer.external_id} domain: {offer.domain}')
-                elif resp.status == 404 or resp.status == 410:
-                    offer.is_active = False
-                    db.session.merge(offer)
-                    db.session.commit()
-                    logger.info(f'Not found status set to inactive: {offer.external_id} domain: {offer.domain}')
-        elif offer.domain == "olx":
-            url = f'https://www.olx.uz/api/v1/offers/{offer.external_id}'
-            async with (session.get(url) as resp):
-                if resp.status == 200:
-                    # print(url)
-                    response = await resp.json()
-                    data = response.get('data')
-                    if data.get('status') != 'active':
-                        offer.is_active = False
-                        db.session.merge(offer)
-                        db.session.commit()
-                        logger.info(f'Set to inactive: {offer.external_id} domain: {offer.domain}')
-                    if wrong_type_of_market:
-                        params = data.get('params')
-                        for param in params:
-                            key = param.get("key")
-                            if key == 'type_of_market':
-                                if param.get('value').get('key') == 'secondary':
-                                    type_of_market = "Вторичный"
-                                elif param.get('value').get('key') == 'primary':
-                                    type_of_market = "Новостройка"
-                                else:
-                                    logger.error(f"Bad format type of market {param.get('value').get('key')}")
+                        logger.info(f'Not found status set to inactive: {offer.external_id} domain: {offer.domain}')
+            elif offer.domain == "olx":
+                url = f'https://www.olx.uz/api/v1/offers/{offer.external_id}'
+                async with (session.get(url) as resp):
+                    if resp.status == 200:
+                        # print(url)
+                        response = await resp.json()
+                        data = response.get('data')
+                        if data.get('status') != 'active':
+                            offer.is_active = False
+                            db.session.merge(offer)
+                            db.session.commit()
+                            logger.info(f'Set to inactive: {offer.external_id} domain: {offer.domain}')
+                        if wrong_type_of_market:
+                            params = data.get('params')
+                            for param in params:
+                                key = param.get("key")
+                                if key == 'type_of_market':
+                                    if param.get('value').get('key') == 'secondary':
+                                        type_of_market = "Вторичный"
+                                    elif param.get('value').get('key') == 'primary':
+                                        type_of_market = "Новостройка"
+                                    else:
+                                        logger.error(f"Bad format type of market {param.get('value').get('key')}")
+                                        break
+                                    offer.is_new_building = type_of_market
+                                    db.session.merge(offer)
+                                    db.session.commit()
+                                    logger.info(f'Wrong type of market for {offer.domain} {offer.external_id} set: {type_of_market}')
                                     break
-                                offer.is_new_building = type_of_market
-                                db.session.merge(offer)
-                                db.session.commit()
-                                logger.info(f'Wrong type of market for {offer.domain} {offer.external_id} set: {type_of_market}')
-                                break
-                            logger.info(f'Nothing happend to {offer.external_id} domain: {offer.domain}')
-                elif resp.status == 404 or resp.status == 410:
-                    offer.is_active = False
-                    db.session.merge(offer)
-                    db.session.commit()
-                    logger.info(f'Not found status set to inactive: {offer.external_id} domain: {offer.domain}')
-                else:
-                    logger.warning(f'Response not handled {resp.status} in domain: {offer.domain}')
-        else:
-            logger.info(f'This domain was never used')
-        await session.close()
+                                logger.error(f'Nothing happend to {offer.external_id} domain: {offer.domain}')
+                    elif resp.status == 404 or resp.status == 410:
+                        offer.is_active = False
+                        db.session.merge(offer)
+                        db.session.commit()
+                        logger.info(f'Not found status set to inactive: {offer.external_id} domain: {offer.domain}')
+                    elif resp.status == 403:
+                        await asyncio.sleep(random.randint(5, 15))
+                        continue
+                    else:
+                        logger.warning(f'Response not handled {resp.status} in domain: {offer.domain}')
+            else:
+                logger.info(f'This domain was never used')
+            await session.close()
+            break
 
 
 # @app.on_event("startup")
