@@ -239,7 +239,7 @@ async def save_flat(flat: SchemaFlat):
     )
     with db():
         query = db.session.query(ModelFlat).filter_by(external_id=db_flat.external_id, domain=db_flat.domain)
-        time_format = "%d/%m/%Y %H:%M:%S"
+        time_format = "%d/%m/%Y %H:%M:%S.%f"
         modified_db = None
         modified_request = None
 
@@ -249,18 +249,10 @@ async def save_flat(flat: SchemaFlat):
             logger.info(f'Flat has been found')
         if query.count() == 0:
             db.session.add(db_flat)
-            logger.info(f'Saving entity:{db_flat.external_id} ADDED')
-        # TODO and modified_db.microsecond != modified_request.microsecond
-        elif (modified_db.second != modified_request.second and modified_db.minute != modified_request.minute) or modified_db.date() != modified_request.date():
+        elif modified_db.minute != modified_request.minute or  modified_db.second != modified_request.second or modified_db.microsecond != modified_request.microsecond:
             db.session.merge(db_flat)
-            print(modified_db.second,
-                  modified_request.second,
-                  modified_db.minute,
-                  modified_request.minute,
-                  modified_db.date,
-                  modified_request.date)
             logger.info(
-                f'Updating entity: {db_flat.external_id} MERGED with modeified:\n{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
+                f'Updating entity: {db_flat.external_id} MERGED with modeified:{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
         else:
             logger.info(f'Continuing with no save {db_flat.external_id} {db_flat.domain}')
         db.session.commit()
