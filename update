@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+git fetch
+git pull
+
+docker compose down
+docker rmi latest:latest
+docker compose up
