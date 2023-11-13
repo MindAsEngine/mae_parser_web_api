@@ -213,7 +213,8 @@ async def read_flat(
         data = list(db.session.query(ModelFlat).filter_by(domain=domain, is_active=True).order_by(
             ModelFlat.external_id).slice(page * limit, (page + 1) * limit))
         data_len = db.session.query(ModelFlat).filter_by(domain=domain).count()
-    logger.info(f'Read from db {data_len}')
+        active_data_len = db.session.query(ModelFlat).filter_by(domain=domain, is_active=True).count()
+    logger.info(f'Read active from {domain}: {active_data_len} total: {data_len} flats')
     return ResponseModel(
         data_length=data_len,
         data=data)
@@ -249,10 +250,10 @@ async def save_flat(flat: SchemaFlat):
             logger.info(f'Flat has been found')
         if query.count() == 0:
             db.session.add(db_flat)
-        elif modified_db.minute != modified_request.minute or  modified_db.second != modified_request.second or modified_db.microsecond != modified_request.microsecond:
+        elif modified_db.minute != modified_request.minute or modified_db.second != modified_request.second or modified_db.microsecond != modified_request.microsecond:
             db.session.merge(db_flat)
             logger.info(
-                f'Updating entity: {db_flat.external_id} MERGED with modeified:{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
+                f'Updating entity: {db_flat.external_id} MERGED with modified:{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
         else:
             logger.info(f'Continuing with no save {db_flat.external_id} {db_flat.domain}')
         db.session.commit()
