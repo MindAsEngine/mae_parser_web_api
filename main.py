@@ -162,6 +162,7 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
             else:
                 logger.info(f'This domain was never used')
             await session.close()
+            logger.info(f'Progress {(offers.index(offer)/len(offers))*100}%')
             break
 
 
