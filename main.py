@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import http
 import random
 
@@ -144,7 +145,8 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
                                     offer.is_new_building = type_of_market
                                     db.session.merge(offer)
                                     db.session.commit()
-                                    logger.info(f'Wrong type of market for {offer.domain} {offer.external_id} set: {type_of_market}')
+                                    logger.info(
+                                        f'Wrong type of market for {offer.domain} {offer.external_id} set: {type_of_market}')
                                     break
                                 logger.error(f'Nothing happend to {offer.external_id} domain: {offer.domain}')
                     elif resp.status == 404 or resp.status == 410:
@@ -241,23 +243,32 @@ async def save_flat(flat: SchemaFlat):
         modified_request = None
 
         if query.first() is not None:
-            modified_db = query.first().modified
+            modified_db = query.first().modified  # datetime.datetime.strptime(, time_format)
             modified_request = flat.modified
-            logger.info(
-                f'Date time for merge equation \n{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
+            logger.info(f'Flat has been found')
         if query.count() == 0:
             db.session.add(db_flat)
             logger.info(f'Saving entity:{db_flat.external_id} ADDED')
-        elif modified_db.strftime(time_format) != modified_request.strftime(time_format):
+        # TODO and modified_db.microsecond != modified_request.microsecond
+        elif (modified_db.second != modified_request.second and modified_db.minute != modified_request.minute) or modified_db.date() != modified_request.date():
             db.session.merge(db_flat)
-            logger.error(
+            print(modified_db.second,
+                  modified_request.second,
+                  modified_db.minute,
+                  modified_request.minute,
+                  modified_db.date,
+                  modified_request.date)
+            logger.info(
                 f'Updating entity: {db_flat.external_id} MERGED with modeified:\n{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
         else:
-            logger.warning(f'Continuing with no save {db_flat.external_id} {db_flat.domain}')
+            logger.info(f'Continuing with no save {db_flat.external_id} {db_flat.domain}')
         db.session.commit()
 
-        logger.info(f'OK! Committed total uybor: {db.session.query(ModelFlat).filter_by(domain="uybor").count()}')
-        logger.info(f'OK! Committed total olx: {db.session.query(ModelFlat).filter_by(domain="olx").count()}')
+        logger.info(f'Committed total uybor: {db.session.query(ModelFlat).filter_by(domain="uybor").count()}')
+        logger.info(f'Committed total olx: {db.session.query(ModelFlat).filter_by(domain="olx").count()}')
+
+        logger.info(f'Active uybor: {db.session.query(ModelFlat).filter_by(domain="uybor", is_active=True).count()}')
+        logger.info(f'Active olx: {db.session.query(ModelFlat).filter_by(domain="olx", is_active=True).count()}')
     pass
 
 
