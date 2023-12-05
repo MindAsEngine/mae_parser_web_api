@@ -9,9 +9,13 @@ from fastapi import FastAPI
 from fastapi_sqlalchemy import DBSessionMiddleware, db
 import logging
 
-from schema import Flat as SchemaFlat, GetFlatsMessage
+from schema import Flat as SchemaFlat
+from schema import Land as SchemaLand
+from schema import Commerce as SchemaCommerce
 
 from models import Flat as ModelFlat
+from models import Land as ModelLand
+from models import Commerce as ModelCommerce
 
 from ResponseModel import ResponseModel
 
@@ -55,12 +59,78 @@ status_codes = http.HTTPStatus
 
 
 @app.get("/get_flats")
-async def get_all(
+async def get_all_flats(
         page: int = 0,
         limit: int = 10000,
         domain: str = "uybor"):
     response = await read_flat(page=page, limit=limit, domain=domain)
     return response
+
+
+@app.get("/get_lands")
+async def get_all_lands(
+        page: int = 0,
+        limit: int = 10000,
+        domain: str = "uybor"):
+    response = await read_land(page=page, limit=limit, domain=domain)
+    return response
+
+
+@app.get("/get_commerces")
+async def get_all_commerces(
+        page: int = 0,
+        limit: int = 10000,
+        domain: str = "uybor"):
+    response = await read_commerce(page=page, limit=limit, domain=domain)
+    return response
+
+
+async def read_flat(
+        page: int = 0,
+        limit: int = 10000,
+        domain: str = "uybor"):
+    with db():
+        data = list(db.session.query(ModelFlat).filter_by(domain=domain, is_active=True).order_by(
+            ModelFlat.external_id).slice(page * limit, (page + 1) * limit))
+        data_len = db.session.query(ModelFlat).filter_by(domain=domain).count()
+        active_data_len = db.session.query(ModelFlat).filter_by(domain=domain, is_active=True).count()
+    logger.info(f'Read active flats from {domain}: {active_data_len} total: {data_len} flats')
+    return ResponseModel(
+        data_length=data_len, #ALL_DATA
+        active_data_len=active_data_len, #active_data_length
+        data=data)
+
+
+async def read_land(
+        page: int = 0,
+        limit: int = 10000,
+        domain: str = "uybor"):
+    with db():
+        data = list(db.session.query(ModelLand).filter_by(domain=domain, is_active=True).order_by(
+            ModelLand.external_id).slice(page * limit, (page + 1) * limit))
+        data_len = db.session.query(ModelLand).filter_by(domain=domain).count()
+        active_data_len = db.session.query(ModelLand).filter_by(domain=domain, is_active=True).count()
+    logger.info(f'Read active lands from {domain}: {active_data_len} total: {data_len} flats')
+    return ResponseModel(
+        data_length=data_len, #ALL_DATA
+        active_data_len=active_data_len, #active_data_length
+        data=data)
+
+
+async def read_commerce(
+        page: int = 0,
+        limit: int = 10000,
+        domain: str = "uybor"):
+    with db():
+        data = list(db.session.query(ModelCommerce).filter_by(domain=domain, is_active=True).order_by(
+            ModelCommerce.external_id).slice(page * limit, (page + 1) * limit))
+        data_len = db.session.query(ModelCommerce).filter_by(domain=domain).count()
+        active_data_len = db.session.query(ModelCommerce).filter_by(domain=domain, is_active=True).count()
+    logger.info(f'Read active commerces from {domain}: {active_data_len} total: {data_len} flats')
+    return ResponseModel(
+        data_length=data_len, #ALL_DATA
+        active_data_len=active_data_len, #active_data_length
+        data=data)
 
 
 @app.post("/post_flats")
@@ -72,6 +142,159 @@ async def post_flats(request: list[SchemaFlat]):
         await save_flat(i)
         # await app.response_queue.put(i)
     return ResponseModel(status_code=status_codes.CONTINUE)
+
+
+@app.post("/post_lands")
+async def post_lands(request: list[SchemaLand]):
+    if len(request) == 0:
+        logger.warning(f'Post method received no data!')
+        return ResponseModel(status_code=status_codes.NO_CONTENT)
+    for i in request:
+        await save_land(i)
+        # await app.response_queue.put(i)
+    return ResponseModel(status_code=status_codes.CONTINUE)
+
+
+@app.post("/post_commerces")
+async def post_commerces(request: list[SchemaCommerce]):
+    if len(request) == 0:
+        logger.warning(f'Post method received no data!')
+        return ResponseModel(status_code=status_codes.NO_CONTENT)
+    for i in request:
+        await save_commerce(i)
+        # await app.response_queue.put(i)
+    return ResponseModel(status_code=status_codes.CONTINUE)
+
+
+async def save_flat(flat: SchemaFlat):
+    db_flat = ModelFlat(
+        external_id=flat.external_id,
+        url=flat.url,
+        square=flat.square,
+        floor=flat.floor,
+        total_floor=flat.total_floor,
+        address=flat.address,
+        repair=flat.repair,
+        is_new_building=flat.is_new_building,
+        room=flat.room,
+        modified=flat.modified,
+        price_uye=flat.price_uye,
+        price_uzs=flat.price_uzs,
+        description=flat.description,
+        domain=flat.domain,
+        is_active=flat.is_active
+    )
+    with db():
+        query = db.session.query(ModelFlat).filter_by(external_id=db_flat.external_id, domain=db_flat.domain)
+        time_format = "%d/%m/%Y %H:%M:%S.%f"
+        modified_db = None
+        modified_request = None
+
+        if query.first() is not None:
+            modified_db = query.first().modified  # datetime.datetime.strptime(, time_format)
+            modified_request = flat.modified
+            logger.info(f'Flat has been found')
+        if query.count() == 0:
+            db.session.add(db_flat)
+        elif modified_db.minute != modified_request.minute or modified_db.second != modified_request.second or modified_db.microsecond != modified_request.microsecond:
+            db.session.merge(db_flat)
+            logger.info(
+                f'Updating entity: {db_flat.external_id} MERGED with modified:{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
+        else:
+            logger.info(f'Continuing with no save {db_flat.external_id} {db_flat.domain}')
+        db.session.commit()
+
+        logger.info(f'Committed total uybor: {db.session.query(ModelFlat).filter_by(domain="uybor").count()}')
+        logger.info(f'Committed total olx: {db.session.query(ModelFlat).filter_by(domain="olx").count()}')
+
+        logger.info(f'Active uybor: {db.session.query(ModelFlat).filter_by(domain="uybor", is_active=True).count()}')
+        logger.info(f'Active olx: {db.session.query(ModelFlat).filter_by(domain="olx", is_active=True).count()}')
+    pass
+
+
+async def save_land(land: SchemaLand):
+    db_land = ModelLand(
+        external_id=land.external_id,
+        domain=land.domain,
+        url=land.url,
+        square=land.square,
+        address=land.address,
+        location_feature=land.location_feature,
+        type_of_land=land.type_of_land,
+        price_uye=land.price_uye,
+        price_uzs=land.price_uzs,
+        description=land.description,
+        modified=land.modified,
+        is_active=land.is_active,
+    )
+    with db():
+        query = db.session.query(ModelLand).filter_by(external_id=db_land.external_id, domain=db_land.domain)
+        time_format = "%d/%m/%Y %H:%M:%S.%f"
+        modified_db = None
+        modified_request = None
+
+        if query.first() is not None:
+            modified_db = query.first().modified  # datetime.datetime.strptime(, time_format)
+            modified_request = land.modified
+            logger.info(f'land has been found')
+        if query.count() == 0:
+            db.session.add(db_land)
+        elif modified_db.minute != modified_request.minute or modified_db.second != modified_request.second or modified_db.microsecond != modified_request.microsecond:
+            db.session.merge(db_land)
+            logger.info(
+                f'Updating entity: {db_land.external_id} MERGED with modified:{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
+        else:
+            logger.info(f'Continuing with no save {db_land.external_id} {db_land.domain}')
+        db.session.commit()
+
+        logger.info(f'Committed total uybor: {db.session.query(ModelLand).filter_by(domain="uybor").count()}')
+        logger.info(f'Committed total olx: {db.session.query(ModelLand).filter_by(domain="olx").count()}')
+
+        logger.info(f'Active uybor: {db.session.query(ModelLand).filter_by(domain="uybor", is_active=True).count()}')
+        logger.info(f'Active olx: {db.session.query(ModelLand).filter_by(domain="olx", is_active=True).count()}')
+    pass
+
+
+async def save_commerce(commerce: SchemaCommerce):
+    db_commerce = ModelCommerce(
+        external_id =commerce.external_id,
+        url = commerce.url,
+        domain = commerce.domain,
+        square = commerce.square,
+        address = commerce.address,
+        type_of_commerce = commerce.type_of_commerce,
+        price_uye = commerce.price_uye,
+        price_uzs = commerce.price_uzs,
+        description = commerce.description,
+        modified = commerce.modified,
+        is_active = commerce.is_active,
+    )
+    with db():
+        query = db.session.query(ModelCommerce).filter_by(external_id=db_commerce.external_id, domain=db_commerce.domain)
+        time_format = "%d/%m/%Y %H:%M:%S.%f"
+        modified_db = None
+        modified_request = None
+
+        if query.first() is not None:
+            modified_db = query.first().modified  # datetime.datetime.strptime(, time_format)
+            modified_request = commerce.modified
+            logger.info(f'commerce has been found')
+        if query.count() == 0:
+            db.session.add(db_commerce)
+        elif modified_db.minute != modified_request.minute or modified_db.second != modified_request.second or modified_db.microsecond != modified_request.microsecond:
+            db.session.merge(db_commerce)
+            logger.info(
+                f'Updating entity: {db_commerce.external_id} MERGED with modified:{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
+        else:
+            logger.info(f'Continuing with no save {db_commerce.external_id} {db_commerce.domain}')
+        db.session.commit()
+
+        logger.info(f'Committed total uybor: {db.session.query(ModelCommerce).filter_by(domain="uybor").count()}')
+        logger.info(f'Committed total olx: {db.session.query(ModelCommerce).filter_by(domain="olx").count()}')
+
+        logger.info(f'Active uybor: {db.session.query(ModelCommerce).filter_by(domain="uybor", is_active=True).count()}')
+        logger.info(f'Active olx: {db.session.query(ModelCommerce).filter_by(domain="olx", is_active=True).count()}')
+    pass
 
 
 @app.get("/get_count")
@@ -205,65 +428,10 @@ async def is_active_all_offers(offers, wrong_type_of_market=False):
 #         # app.response_queue.task_done()
 
 
-async def read_flat(
-        page: int = 0,
-        limit: int = 10000,
-        domain: str = "uybor"):
-    with db():
-        data = list(db.session.query(ModelFlat).filter_by(domain=domain, is_active=True).order_by(
-            ModelFlat.external_id).slice(page * limit, (page + 1) * limit))
-        data_len = db.session.query(ModelFlat).filter_by(domain=domain).count()
-        active_data_len = db.session.query(ModelFlat).filter_by(domain=domain, is_active=True).count()
-    logger.info(f'Read active from {domain}: {active_data_len} total: {data_len} flats')
-    return ResponseModel(
-        data_length=data_len,
-        data=data)
 
 
-async def save_flat(flat: SchemaFlat):
-    db_flat = ModelFlat(
-        external_id=flat.external_id,
-        url=flat.url,
-        square=flat.square,
-        floor=flat.floor,
-        total_floor=flat.total_floor,
-        address=flat.address,
-        repair=flat.repair,
-        is_new_building=flat.is_new_building,
-        room=flat.room,
-        modified=flat.modified,
-        price_uye=flat.price_uye,
-        price_uzs=flat.price_uzs,
-        description=flat.description,
-        domain=flat.domain,
-        is_active=flat.is_active
-    )
-    with db():
-        query = db.session.query(ModelFlat).filter_by(external_id=db_flat.external_id, domain=db_flat.domain)
-        time_format = "%d/%m/%Y %H:%M:%S.%f"
-        modified_db = None
-        modified_request = None
 
-        if query.first() is not None:
-            modified_db = query.first().modified  # datetime.datetime.strptime(, time_format)
-            modified_request = flat.modified
-            logger.info(f'Flat has been found')
-        if query.count() == 0:
-            db.session.add(db_flat)
-        elif modified_db.minute != modified_request.minute or modified_db.second != modified_request.second or modified_db.microsecond != modified_request.microsecond:
-            db.session.merge(db_flat)
-            logger.info(
-                f'Updating entity: {db_flat.external_id} MERGED with modified:{modified_db.strftime(time_format)}\n{modified_request.strftime(time_format)}')
-        else:
-            logger.info(f'Continuing with no save {db_flat.external_id} {db_flat.domain}')
-        db.session.commit()
 
-        logger.info(f'Committed total uybor: {db.session.query(ModelFlat).filter_by(domain="uybor").count()}')
-        logger.info(f'Committed total olx: {db.session.query(ModelFlat).filter_by(domain="olx").count()}')
-
-        logger.info(f'Active uybor: {db.session.query(ModelFlat).filter_by(domain="uybor", is_active=True).count()}')
-        logger.info(f'Active olx: {db.session.query(ModelFlat).filter_by(domain="olx", is_active=True).count()}')
-    pass
 
 
 if __name__ == '__main__':

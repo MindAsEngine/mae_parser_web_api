@@ -24,7 +24,38 @@ class Flat(BaseModel):
         orm_mode = True
 
 
-class GetFlatsMessage(BaseModel):
-    page: int
-    limit: int
+class Land(BaseModel):
+    external_id: int
     domain: str
+    url: str
+    square: float
+    address: str
+    location_feature: str
+    type_of_land: str
+    price_uye: float
+    price_uzs: float
+    description: str
+    modified: datetime
+    # modified: str
+    is_active: bool
+
+    class Config:
+        orm_mode = True
+
+
+class Commerce(BaseModel):
+    external_id: int
+    url: str
+    domain: str
+    square: float
+    address: str
+    type_of_commerce: str
+    price_uye: float
+    price_uzs: float
+    description: str
+    modified: datetime
+    # modified: str
+    is_active: bool
+
+    class Config:
+        orm_mode = True
